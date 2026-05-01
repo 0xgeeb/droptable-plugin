@@ -14,6 +14,7 @@ This external RuneLite plugin adds a sidebar panel that lets the player search f
 - `src/main/java/com/droptable/DropTablePlugin.java`: plugin entrypoint and sidebar registration
 - `src/main/java/com/droptable/DropTablePanel.java`: sidebar UI
 - `src/main/java/com/droptable/WikiDropService.java`: wiki API calls and table parsing
+- `src/runelite/java/com/droptable/DropTablePluginTest.java`: local RuneLite launcher for manual testing
 
 ## Running
 
@@ -27,6 +28,12 @@ or launch through:
 
 ```bash
 gradle run
+```
+
+To build the plugin jar without running the launcher:
+
+```bash
+gradle build
 ```
 
 If you want this ready for Plugin Hub submission, add the usual wrapper and plugin-hub metadata expected by your target workflow.

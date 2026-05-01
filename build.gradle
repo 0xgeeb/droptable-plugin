@@ -16,6 +16,24 @@ repositories {
 def runeLiteVersion = 'latest.release'
 def pluginMainClass = 'com.droptable.DropTablePluginTest'
 
+sourceSets {
+	runelite {
+		java {
+			srcDir 'src/runelite/java'
+		}
+		resources {
+			srcDir 'src/runelite/resources'
+		}
+		compileClasspath += sourceSets.main.output + configurations.compileClasspath + configurations.testRuntimeClasspath
+		runtimeClasspath += output + compileClasspath
+	}
+}
+
+configurations {
+	runeliteImplementation.extendsFrom testImplementation
+	runeliteRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
 dependencies {
 	compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
 	compileOnly 'org.projectlombok:lombok:1.18.32'
@@ -34,27 +52,23 @@ tasks.withType(JavaCompile).configureEach {
 	options.release.set(11)
 }
 
-tasks.named('test') {
-	failOnNoDiscoveredTests = false
-}
-
 tasks.register('run', JavaExec) {
-	classpath = sourceSets.test.runtimeClasspath
+	classpath = sourceSets.runelite.runtimeClasspath
 	mainClass = pluginMainClass
 	jvmArgs '-ea'
 	args '--developer-mode', '--debug'
 }
 
 tasks.register('shadowJar', Jar) {
-	dependsOn configurations.testRuntimeClasspath
+	dependsOn configurations.runeliteRuntimeClasspath
 	manifest {
 		attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
 	}
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	from sourceSets.main.output
-	from sourceSets.test.output
+	from sourceSets.runelite.output
 	from {
-		configurations.testRuntimeClasspath.collect { file ->
+		configurations.runeliteRuntimeClasspath.collect { file ->
 			file.isDirectory() ? file : zipTree(file)
 		}
 	}
