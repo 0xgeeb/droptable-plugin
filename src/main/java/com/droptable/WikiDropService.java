@@ -75,9 +75,9 @@ class WikiDropService
 			+ "&namespace=0"
 			+ "&format=json"
 			+ "&search=" + urlEncode(query);
-		JsonArray root = JsonParser.parseString(send(url)).getAsJsonArray();
+		JsonArray root = new JsonParser().parse(send(url)).getAsJsonArray();
 		JsonArray titles = root.get(1).getAsJsonArray();
-		if (titles.isEmpty())
+		if (titles.size() == 0)
 		{
 			throw new IOException("No wiki page matched \"" + query + "\".");
 		}
@@ -92,7 +92,7 @@ class WikiDropService
 			+ "&format=json"
 			+ "&formatversion=2"
 			+ "&page=" + urlEncode(title);
-		JsonObject root = JsonParser.parseString(send(url)).getAsJsonObject();
+		JsonObject root = new JsonParser().parse(send(url)).getAsJsonObject();
 		JsonObject parse = root.getAsJsonObject("parse");
 		if (parse == null || !parse.has("text"))
 		{
