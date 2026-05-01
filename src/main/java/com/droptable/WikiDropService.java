@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
@@ -32,8 +33,11 @@ class WikiDropService
 	private static final Pattern TABLE_PATTERN = Pattern.compile("(?is)<table[^>]*class=\"[^\"]*wikitable[^\"]*\"[^>]*>.*?</table>");
 	private static final Pattern ROW_PATTERN = Pattern.compile("(?is)<tr[^>]*>(.*?)</tr>");
 	private static final Pattern CELL_PATTERN = Pattern.compile("(?is)<t([hd])[^>]*>(.*?)</t\\1>");
+	private static final Pattern CAPTION_PATTERN = Pattern.compile("(?is)<caption[^>]*>(.*?)</caption>");
 	private static final Pattern TAG_PATTERN = Pattern.compile("(?is)<[^>]+>");
 	private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
+	private static final Pattern RARITY_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.\\d+)?)\\s*/\\s*(\\d+(?:\\.\\d+)?)");
+	private static final Pattern MULTIPLIER_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.\\d+)?)\\s*[x×]\\s*(\\d+(?:\\.\\d+)?)\\s*/\\s*(\\d+(?:\\.\\d+)?)");
 	private static final List<String> RARITY_HEADERS = List.of("rarity", "drop rate");
 	private static final List<String> QUANTITY_HEADERS = List.of("quantity", "qty", "amount");
 	private static final List<String> ITEM_HEADERS = List.of("item", "items");
@@ -57,7 +61,7 @@ class WikiDropService
 		}
 
 		String title = resolveTitle(normalized);
-		String html = fetchParsedHtml(title);
+		String html = fetchBestDropHtml(title);
 		List<DropSection> sections = parseDropSections(html);
 		if (sections.isEmpty())
 		{
@@ -65,6 +69,34 @@ class WikiDropService
 		}
 
 		return new SearchResult(title, WIKI_BASE + "/w/" + encodePageTitle(title), sections);
+	}
+
+	List<String> suggest(String query) throws IOException, InterruptedException
+	{
+		String normalized = query == null ? "" : query.trim();
+		if (normalized.length() < 2)
+		{
+			return List.of();
+		}
+
+		String url = API_BASE
+			+ "?action=opensearch"
+			+ "&limit=8"
+			+ "&namespace=0"
+			+ "&format=json"
+			+ "&search=" + urlEncode(normalized);
+		JsonArray root = new JsonParser().parse(send(url)).getAsJsonArray();
+		JsonArray titles = root.get(1).getAsJsonArray();
+		List<String> suggestions = new ArrayList<>();
+		for (int i = 0; i < titles.size(); i++)
+		{
+			String title = titles.get(i).getAsString();
+			if (!title.toLowerCase(Locale.ROOT).contains("drop table"))
+			{
+				suggestions.add(title);
+			}
+		}
+		return suggestions;
 	}
 
 	private String resolveTitle(String query) throws IOException, InterruptedException
@@ -101,6 +133,38 @@ class WikiDropService
 		return parse.get("text").getAsString();
 	}
 
+	private String fetchBestDropHtml(String title) throws IOException, InterruptedException
+	{
+		List<String> candidateTitles = List.of(title + " drop table", title);
+		Optional<String> bestHtml = Optional.empty();
+		int bestScore = -1;
+
+		for (String candidateTitle : candidateTitles)
+		{
+			try
+			{
+				String html = fetchParsedHtml(candidateTitle);
+				int score = scoreDropHtml(html);
+				if (score > bestScore)
+				{
+					bestScore = score;
+					bestHtml = Optional.of(html);
+				}
+			}
+			catch (IOException ex)
+			{
+				// Fall through to the next candidate.
+			}
+		}
+
+		if (bestHtml.isPresent())
+		{
+			return bestHtml.get();
+		}
+
+		throw new IOException("The wiki page could not be parsed.");
+	}
+
 	private List<DropSection> parseDropSections(String html)
 	{
 		List<Heading> headings = extractHeadings(html);
@@ -124,10 +188,13 @@ class WikiDropService
 				continue;
 			}
 
-			String sectionName = findNearestHeading(headings, table.startIndex);
-			sections.add(new DropSection(sectionName, rows));
+			String sectionName = determineSectionName(table, headings);
+			rows.sort(Comparator.comparingDouble(DropRow::getRarityScore).reversed()
+				.thenComparing(DropRow::getItem));
+			sections.add(new DropSection(sectionName, rankSection(sectionName), rows));
 		}
 
+		sections.sort(Comparator.comparingInt(DropSection::getPriority).thenComparing(DropSection::getName));
 		return sections;
 	}
 
@@ -153,7 +220,7 @@ class WikiDropService
 		Matcher matcher = TABLE_PATTERN.matcher(html);
 		while (matcher.find())
 		{
-			tables.add(new TableBlock(matcher.start(), matcher.group()));
+			tables.add(new TableBlock(matcher.start(), matcher.group(), html));
 		}
 		return tables;
 	}
@@ -202,7 +269,7 @@ class WikiDropService
 			{
 				continue;
 			}
-			rows.add(new DropRow(item, quantity, rarity, notes));
+			rows.add(new DropRow(item, quantity, rarity, notes, parseRarityScore(rarity)));
 		}
 		return rows;
 	}
@@ -238,18 +305,34 @@ class WikiDropService
 		return -1;
 	}
 
-	private String findNearestHeading(List<Heading> headings, int position)
+	private String determineSectionName(TableBlock table, List<Heading> headings)
 	{
+		String caption = extractCaption(table.html);
+		if (!caption.isEmpty())
+		{
+			return normalizeSectionName(caption);
+		}
+
 		String fallback = "Drops";
 		for (Heading heading : headings)
 		{
-			if (heading.position > position)
+			if (heading.position > table.startIndex)
 			{
 				break;
 			}
 			fallback = heading.name;
 		}
-		return fallback;
+
+		if ("Drops".equalsIgnoreCase(fallback))
+		{
+			String contextual = extractContextualLabel(table);
+			if (!contextual.isEmpty())
+			{
+				return normalizeSectionName(contextual);
+			}
+		}
+
+		return normalizeSectionName(fallback);
 	}
 
 	private String buildNotes(List<String> cells, int itemIndex, int quantityIndex, int rarityIndex)
@@ -264,6 +347,138 @@ class WikiDropService
 			notes.add(cells.get(i));
 		}
 		return String.join(" | ", notes);
+	}
+
+	private String extractCaption(String tableHtml)
+	{
+		Matcher matcher = CAPTION_PATTERN.matcher(tableHtml);
+		if (matcher.find())
+		{
+			return cleanText(matcher.group(1));
+		}
+		return "";
+	}
+
+	private String extractContextualLabel(TableBlock table)
+	{
+		int contextStart = Math.max(0, table.startIndex - 240);
+		String prefix = table.fullHtml.substring(contextStart, table.startIndex);
+		List<Heading> localHeadings = extractHeadings(prefix);
+		if (!localHeadings.isEmpty())
+		{
+			return localHeadings.get(localHeadings.size() - 1).name;
+		}
+		String cleaned = cleanText(prefix);
+		String[] parts = cleaned.split("\\.");
+		if (parts.length == 0)
+		{
+			return "";
+		}
+		return parts[parts.length - 1].trim();
+	}
+
+	private int scoreDropHtml(String html)
+	{
+		int score = 0;
+		for (String keyword : List.of("tertiary", "unique", "100%", "mutagen", "rare drop table"))
+		{
+			if (html.toLowerCase(Locale.ROOT).contains(keyword))
+			{
+				score += 5;
+			}
+		}
+		score += extractTables(html).size();
+		return score;
+	}
+
+	private int rankSection(String sectionName)
+	{
+		String normalized = sectionName.toLowerCase(Locale.ROOT);
+		if (normalized.contains("tertiary"))
+		{
+			return 0;
+		}
+		if (normalized.contains("unique") || normalized.contains("mutagen") || normalized.contains("pet"))
+		{
+			return 1;
+		}
+		if (normalized.contains("rare"))
+		{
+			return 2;
+		}
+		if (normalized.contains("100%") || normalized.contains("always"))
+		{
+			return 3;
+		}
+		if (normalized.contains("resources") || normalized.contains("weapons") || normalized.contains("armour"))
+		{
+			return 4;
+		}
+		if (normalized.contains("other"))
+		{
+			return 5;
+		}
+		return 6;
+	}
+
+	private String normalizeSectionName(String sectionName)
+	{
+		String cleaned = sectionName == null ? "" : sectionName.trim();
+		if (cleaned.isEmpty())
+		{
+			return "Drops";
+		}
+		if (cleaned.equalsIgnoreCase("drops"))
+		{
+			return "General Drops";
+		}
+		return cleaned;
+	}
+
+	private double parseRarityScore(String rarity)
+	{
+		String normalized = rarity.toLowerCase(Locale.ROOT);
+		if (normalized.contains("always"))
+		{
+			return 1d;
+		}
+
+		Matcher multiplied = MULTIPLIER_PATTERN.matcher(normalized);
+		if (multiplied.find())
+		{
+			double multiplier = parseNumber(multiplied.group(1));
+			double numerator = parseNumber(multiplied.group(2));
+			double denominator = parseNumber(multiplied.group(3));
+			if (multiplier > 0d && numerator > 0d)
+			{
+				return denominator / (multiplier * numerator);
+			}
+		}
+
+		Matcher matcher = RARITY_PATTERN.matcher(normalized);
+		if (matcher.find())
+		{
+			double numerator = parseNumber(matcher.group(1));
+			double denominator = parseNumber(matcher.group(2));
+			if (numerator > 0d)
+			{
+				return denominator / numerator;
+			}
+		}
+
+		return 0d;
+	}
+
+	private double parseNumber(String value)
+	{
+		try
+		{
+			return Double.parseDouble(value);
+		}
+		catch (NumberFormatException ex)
+		{
+			return 0d;
+		}
 	}
 
 	private String send(String url) throws IOException, InterruptedException
@@ -333,11 +548,13 @@ class WikiDropService
 	{
 		private final int startIndex;
 		private final String html;
+		private final String fullHtml;
 
-		private TableBlock(int startIndex, String html)
+		private TableBlock(int startIndex, String html, String fullHtml)
 		{
 			this.startIndex = startIndex;
 			this.html = html;
+			this.fullHtml = fullHtml;
 		}
 	}
 }

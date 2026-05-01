@@ -21,7 +21,7 @@ import net.runelite.client.ui.NavigationButton;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Wiki Drop Table",
+	name = "Drop Table",
 	description = "Searches the OSRS Wiki and shows enemy and boss drop tables in the sidebar",
 	tags = {"drops", "wiki", "boss", "monster", "loot"}
 )
@@ -41,9 +41,9 @@ public class DropTablePlugin extends Plugin
 	protected void startUp()
 	{
 		executorService = Executors.newSingleThreadExecutor();
-		panel = new DropTablePanel(executorService, this::runSearch);
+		panel = new DropTablePanel(executorService, this::runSearch, this::runSuggestions);
 		navigationButton = NavigationButton.builder()
-			.tooltip("Wiki Drop Table")
+			.tooltip("Drop Table")
 			.icon(createIcon())
 			.priority(5)
 			.panel(panel)
@@ -97,6 +97,28 @@ public class DropTablePlugin extends Plugin
 					panel.renderError(message);
 				}
 			});
+		}
+	}
+
+	private void runSuggestions(String query)
+	{
+		try
+		{
+			java.util.List<String> suggestions = wikiDropService.suggest(query);
+			SwingUtilities.invokeLater(() -> {
+				if (panel != null)
+				{
+					panel.renderSuggestions(query, suggestions);
+				}
+			});
+		}
+		catch (IOException | InterruptedException ex)
+		{
+			if (ex instanceof InterruptedException)
+			{
+				Thread.currentThread().interrupt();
+			}
+			log.debug("Failed to load suggestions for {}", query, ex);
 		}
 	}
 

@@ -4,67 +4,95 @@ import com.droptable.DropTableModels.DropRow;
 import com.droptable.DropTableModels.DropSection;
 import com.droptable.DropTableModels.SearchResult;
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
-import javax.swing.JEditorPane;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 
 class DropTablePanel extends PluginPanel
 {
+	private static final Color TEXT = new Color(223, 223, 223);
+	private static final Color MUTED = new Color(157, 161, 167);
+	private static final Color HEADER = new Color(255, 204, 102);
+	private static final Color DIVIDER = new Color(52, 56, 62);
+	private static final Color SUGGESTION_SELECTED = new Color(61, 68, 79);
+	private static final int ITEM_WRAP_WIDTH = 135;
+
 	private final ExecutorService executor;
 	private final Consumer<String> searchAction;
+	private final Consumer<String> suggestionAction;
 	private final JTextField searchField = new JTextField();
 	private final JButton searchButton = new JButton("Search");
-	private final JLabel statusLabel = new JLabel("Search the OSRS Wiki for a boss or enemy.");
-	private final JEditorPane resultsPane = new JEditorPane("text/html", "");
+	private final JLabel monsterLabel = new JLabel("Drop Table");
+	private final JLabel statusLabel = new JLabel("Start typing a monster or boss name.");
+	private final JPanel resultsPanel = new JPanel();
+	private final DefaultListModel<String> suggestionModel = new DefaultListModel<>();
+	private final JList<String> suggestionList = new JList<>(suggestionModel);
+	private final JPopupMenu suggestionPopup = new JPopupMenu();
 
-	DropTablePanel(ExecutorService executor, Consumer<String> searchAction)
+	DropTablePanel(ExecutorService executor, Consumer<String> searchAction, Consumer<String> suggestionAction)
 	{
 		super(false);
 		this.executor = executor;
 		this.searchAction = searchAction;
+		this.suggestionAction = suggestionAction;
 
-		setLayout(new BorderLayout());
+		setLayout(new BorderLayout(0, 8));
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
 		setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
 		JPanel top = new JPanel();
-		top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
 		top.setOpaque(false);
-
-		searchField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
-		searchField.addActionListener(this::submitSearch);
-
-		searchButton.addActionListener(this::submitSearch);
-		searchButton.setAlignmentX(LEFT_ALIGNMENT);
-
-		statusLabel.setAlignmentX(LEFT_ALIGNMENT);
-
-		top.add(searchField);
+		top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+		top.add(createSearchControls());
 		top.add(Box.createVerticalStrut(8));
-		top.add(searchButton);
-		top.add(Box.createVerticalStrut(8));
+
+		monsterLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		monsterLabel.setForeground(TEXT);
+		monsterLabel.setFont(monsterLabel.getFont().deriveFont(Font.BOLD, 16f));
+		top.add(monsterLabel);
+
+		statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		statusLabel.setForeground(MUTED);
+		statusLabel.setFont(statusLabel.getFont().deriveFont(Font.PLAIN, 12f));
 		top.add(statusLabel);
 
-		resultsPane.setEditable(false);
-		resultsPane.setOpaque(false);
-		resultsPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
-		resultsPane.setText(emptyStateHtml());
+		resultsPanel.setOpaque(false);
+		resultsPanel.setLayout(new BoxLayout(resultsPanel, BoxLayout.Y_AXIS));
+		renderEmptyState();
 
-		JScrollPane scrollPane = new JScrollPane(resultsPane);
-		scrollPane.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+		JScrollPane scrollPane = new JScrollPane(resultsPanel);
+		scrollPane.setBorder(BorderFactory.createEmptyBorder());
+		scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+		scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+		scrollPane.getViewport().setOpaque(false);
+		scrollPane.getViewport().setBackground(ColorScheme.DARK_GRAY_COLOR);
+		scrollPane.setOpaque(false);
 
 		add(top, BorderLayout.NORTH);
 		add(scrollPane, BorderLayout.CENTER);
@@ -77,25 +105,251 @@ class DropTablePanel extends PluginPanel
 
 	void renderLoading(String query)
 	{
+		monsterLabel.setText("Drop Table");
 		statusLabel.setText("Searching for " + query + "...");
 		searchButton.setEnabled(false);
-		resultsPane.setText(loadingStateHtml(query));
+		clearSuggestions();
+		resultsPanel.removeAll();
+		resultsPanel.add(createMessageLabel("Loading drop table..."));
+		repaintResults();
 	}
 
 	void renderResult(SearchResult result)
 	{
-		statusLabel.setText("Showing drop tables for " + result.getTitle() + ".");
+		monsterLabel.setText(result.getTitle());
+		statusLabel.setText("Rarest sections are shown first.");
 		searchButton.setEnabled(true);
-		resultsPane.setText(toHtml(result));
-		resultsPane.setCaretPosition(0);
+		resultsPanel.removeAll();
+
+		for (DropSection section : result.getSections())
+		{
+			resultsPanel.add(createSectionPanel(section));
+			resultsPanel.add(Box.createVerticalStrut(8));
+		}
+
+		repaintResults();
 	}
 
 	void renderError(String message)
 	{
+		monsterLabel.setText("Drop Table");
 		statusLabel.setText(message);
 		searchButton.setEnabled(true);
-		resultsPane.setText(errorStateHtml(message));
-		resultsPane.setCaretPosition(0);
+		resultsPanel.removeAll();
+		resultsPanel.add(createMessageLabel(message));
+		repaintResults();
+	}
+
+	void renderSuggestions(String typedQuery, List<String> suggestions)
+	{
+		if (!searchField.getText().trim().equalsIgnoreCase(typedQuery.trim()))
+		{
+			return;
+		}
+
+		suggestionModel.clear();
+		for (String suggestion : suggestions)
+		{
+			suggestionModel.addElement(suggestion);
+		}
+
+		if (suggestionModel.isEmpty())
+		{
+			suggestionPopup.setVisible(false);
+			return;
+		}
+
+		suggestionList.setSelectedIndex(0);
+		suggestionPopup.show(searchField, 0, searchField.getHeight());
+	}
+
+	private JPanel createSearchControls()
+	{
+		JPanel top = new JPanel(new BorderLayout(6, 0));
+		top.setOpaque(false);
+		top.setAlignmentX(Component.LEFT_ALIGNMENT);
+		top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+
+		searchField.addActionListener(this::submitSearch);
+		searchField.getDocument().addDocumentListener(new DocumentListener()
+		{
+			@Override
+			public void insertUpdate(DocumentEvent e)
+			{
+				requestSuggestions();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e)
+			{
+				requestSuggestions();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e)
+			{
+				requestSuggestions();
+			}
+		});
+		searchField.addKeyListener(new KeyAdapter()
+		{
+			@Override
+			public void keyPressed(KeyEvent e)
+			{
+				if (!suggestionPopup.isVisible())
+				{
+					return;
+				}
+
+				if (e.getKeyCode() == KeyEvent.VK_DOWN)
+				{
+					suggestionList.setSelectedIndex(Math.min(suggestionModel.getSize() - 1, suggestionList.getSelectedIndex() + 1));
+					e.consume();
+				}
+				else if (e.getKeyCode() == KeyEvent.VK_UP)
+				{
+					suggestionList.setSelectedIndex(Math.max(0, suggestionList.getSelectedIndex() - 1));
+					e.consume();
+				}
+				else if (e.getKeyCode() == KeyEvent.VK_ENTER)
+				{
+					applySelectedSuggestion();
+					e.consume();
+				}
+				else if (e.getKeyCode() == KeyEvent.VK_ESCAPE)
+				{
+					clearSuggestions();
+					e.consume();
+				}
+			}
+		});
+
+		searchButton.addActionListener(this::submitSearch);
+
+		suggestionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		suggestionList.setFocusable(false);
+		suggestionList.setCellRenderer(new DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
+			{
+				JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+				label.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+				label.setBackground(isSelected ? SUGGESTION_SELECTED : ColorScheme.DARK_GRAY_COLOR);
+				label.setForeground(TEXT);
+				return label;
+			}
+		});
+		suggestionList.addMouseListener(new java.awt.event.MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(java.awt.event.MouseEvent e)
+			{
+				applySelectedSuggestion();
+			}
+		});
+
+		JScrollPane suggestionScroll = new JScrollPane(suggestionList);
+		suggestionScroll.setBorder(BorderFactory.createLineBorder(DIVIDER));
+		suggestionScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+		suggestionScroll.setPreferredSize(new Dimension(230, 150));
+		suggestionPopup.setBorder(BorderFactory.createEmptyBorder());
+		suggestionPopup.add(suggestionScroll);
+
+		top.add(searchField, BorderLayout.CENTER);
+		top.add(searchButton, BorderLayout.EAST);
+		return top;
+	}
+
+	private JPanel createSectionPanel(DropSection section)
+	{
+		JPanel sectionPanel = new JPanel();
+		sectionPanel.setOpaque(false);
+		sectionPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		sectionPanel.setLayout(new BoxLayout(sectionPanel, BoxLayout.Y_AXIS));
+		sectionPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, DIVIDER));
+
+		JLabel sectionLabel = new JLabel(section.getName());
+		sectionLabel.setForeground(HEADER);
+		sectionLabel.setFont(sectionLabel.getFont().deriveFont(Font.BOLD, 12f));
+		sectionLabel.setBorder(BorderFactory.createEmptyBorder(6, 0, 4, 0));
+		sectionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		sectionPanel.add(sectionLabel);
+
+		for (DropRow row : section.getRows())
+		{
+			sectionPanel.add(createRowPanel(row));
+		}
+
+		return sectionPanel;
+	}
+
+	private JPanel createRowPanel(DropRow row)
+	{
+		JPanel rowPanel = new JPanel(new BorderLayout(8, 0));
+		rowPanel.setOpaque(false);
+		rowPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+		rowPanel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+
+		JLabel itemLabel = new JLabel("<html><body style='width:" + ITEM_WRAP_WIDTH + "px'>" + escape(row.getItem()) + "</body></html>");
+		itemLabel.setForeground(TEXT);
+		itemLabel.setFont(itemLabel.getFont().deriveFont(Font.PLAIN, 12f));
+
+		JLabel rarityLabel = new JLabel(simplifyRarity(row.getRarity()));
+		rarityLabel.setForeground(TEXT);
+		rarityLabel.setFont(rarityLabel.getFont().deriveFont(Font.BOLD, 12f));
+
+		rowPanel.add(itemLabel, BorderLayout.CENTER);
+		rowPanel.add(rarityLabel, BorderLayout.EAST);
+		return rowPanel;
+	}
+
+	private JLabel createMessageLabel(String text)
+	{
+		JLabel label = new JLabel("<html><body style='width:180px'>" + escape(text) + "</body></html>");
+		label.setAlignmentX(Component.LEFT_ALIGNMENT);
+		label.setForeground(MUTED);
+		label.setFont(label.getFont().deriveFont(Font.PLAIN, 12f));
+		return label;
+	}
+
+	private void renderEmptyState()
+	{
+		resultsPanel.removeAll();
+		resultsPanel.add(createMessageLabel("Search for a monster to load its wiki drop table. Suggestions appear as you type."));
+		repaintResults();
+	}
+
+	private void requestSuggestions()
+	{
+		String query = searchField.getText().trim();
+		if (query.length() < 2)
+		{
+			clearSuggestions();
+			return;
+		}
+
+		executor.submit(() -> suggestionAction.accept(query));
+	}
+
+	private void applySelectedSuggestion()
+	{
+		String selected = suggestionList.getSelectedValue();
+		if (selected == null || selected.isBlank())
+		{
+			return;
+		}
+
+		searchField.setText(selected);
+		clearSuggestions();
+		submitSearch(null);
+	}
+
+	private void clearSuggestions()
+	{
+		suggestionPopup.setVisible(false);
+		suggestionModel.clear();
 	}
 
 	private void submitSearch(ActionEvent ignored)
@@ -106,79 +360,51 @@ class DropTablePanel extends PluginPanel
 			renderError("Enter an enemy or boss name.");
 			return;
 		}
+
 		renderLoading(query);
 		executor.submit(() -> searchAction.accept(query));
 	}
 
-	private String toHtml(SearchResult result)
+	private void repaintResults()
 	{
-		StringBuilder html = new StringBuilder();
-		html.append("<html><body style='font-family:sans-serif;color:#dddddd;background:#2b2b2b;'>");
-		html.append("<h2>").append(escape(result.getTitle())).append("</h2>");
-		html.append("<p><a href='").append(result.getPageUrl()).append("'>")
-			.append(escape(result.getPageUrl())).append("</a></p>");
-
-		for (DropSection section : result.getSections())
-		{
-			html.append("<h3>").append(escape(section.getName())).append("</h3>");
-			html.append("<table width='100%' cellspacing='0' cellpadding='4' style='border-collapse:collapse;'>");
-			html.append("<tr bgcolor='#3d3d3d'><th align='left'>Item</th><th align='left'>Qty</th><th align='left'>Rarity</th></tr>");
-			for (DropRow row : section.getRows())
-			{
-				html.append("<tr>")
-					.append("<td>").append(escape(row.getItem())).append(notesSuffix(row.getNotes())).append("</td>")
-					.append("<td>").append(escape(defaultText(row.getQuantity(), "-"))).append("</td>")
-					.append("<td>").append(escape(row.getRarity())).append("</td>")
-					.append("</tr>");
-			}
-			html.append("</table>");
-		}
-
-		html.append("</body></html>");
-		return html.toString();
+		resultsPanel.revalidate();
+		resultsPanel.repaint();
 	}
 
-	private String notesSuffix(String notes)
+	private String simplifyRarity(String rarity)
 	{
-		if (notes == null || notes.isBlank())
+		if (rarity == null || rarity.isBlank())
 		{
 			return "";
 		}
-		return "<br/><span style='color:#a0a0a0;font-size:10px;'>" + escape(notes) + "</span>";
-	}
-
-	private String emptyStateHtml()
-	{
-		return "<html><body style='font-family:sans-serif;color:#bbbbbb;background:#2b2b2b;'>"
-			+ "<p>Enter a monster or boss name to load its wiki drop table.</p>"
-			+ "</body></html>";
-	}
-
-	private String loadingStateHtml(String query)
-	{
-		return "<html><body style='font-family:sans-serif;color:#bbbbbb;background:#2b2b2b;'>"
-			+ "<p>Loading drop tables for <b>" + escape(defaultText(query, "your search")) + "</b>...</p>"
-			+ "</body></html>";
-	}
-
-	private String errorStateHtml(String message)
-	{
-		return "<html><body style='font-family:sans-serif;color:#ff9d9d;background:#2b2b2b;'>"
-			+ "<p>" + escape(message) + "</p>"
-			+ "</body></html>";
+		String normalized = rarity.replace(" ", "");
+		int start = normalized.indexOf("1/");
+		if (start >= 0)
+		{
+			int end = start + 2;
+			while (end < normalized.length())
+			{
+				char ch = normalized.charAt(end);
+				if (!(Character.isDigit(ch) || ch == '.' || ch == ',' || ch == 'k' || ch == 'm' || ch == 'K' || ch == 'M'))
+				{
+					break;
+				}
+				end++;
+			}
+			return normalized.substring(start, end);
+		}
+		if (normalized.equalsIgnoreCase("Always"))
+		{
+			return "Always";
+		}
+		return rarity;
 	}
 
 	private String escape(String text)
 	{
-		return defaultText(text, "")
+		return text
 			.replace("&", "&amp;")
 			.replace("<", "&lt;")
-			.replace(">", "&gt;")
-			.replace("\"", "&quot;");
-	}
-
-	private String defaultText(String text, String fallback)
-	{
-		return text == null || text.isBlank() ? fallback : text;
+			.replace(">", "&gt;");
 	}
 }

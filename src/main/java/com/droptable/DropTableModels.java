@@ -40,17 +40,24 @@ final class DropTableModels
 	static final class DropSection
 	{
 		private final String name;
+		private final int priority;
 		private final List<DropRow> rows;
 
-		DropSection(String name, List<DropRow> rows)
+		DropSection(String name, int priority, List<DropRow> rows)
 		{
 			this.name = name;
+			this.priority = priority;
 			this.rows = rows;
 		}
 
 		String getName()
 		{
 			return name;
+		}
+
+		int getPriority()
+		{
+			return priority;
 		}
 
 		List<DropRow> getRows()
@@ -65,13 +72,15 @@ final class DropTableModels
 		private final String quantity;
 		private final String rarity;
 		private final String notes;
+		private final double rarityScore;
 
-		DropRow(String item, String quantity, String rarity, String notes)
+		DropRow(String item, String quantity, String rarity, String notes, double rarityScore)
 		{
 			this.item = item;
 			this.quantity = quantity;
 			this.rarity = rarity;
 			this.notes = notes;
+			this.rarityScore = rarityScore;
 		}
 
 		String getItem()
@@ -92,6 +101,11 @@ final class DropTableModels
 		String getNotes()
 		{
 			return notes;
+		}
+
+		double getRarityScore()
+		{
+			return rarityScore;
 		}
 	}
 }
