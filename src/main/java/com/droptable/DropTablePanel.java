@@ -8,7 +8,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -47,14 +46,10 @@ class DropTablePanel extends PluginPanel
 	private static final Color RATE_COMMON = new Color(34, 116, 62);
 	private static final Color RATE_UNCOMMON = new Color(130, 116, 34);
 	private static final Color RATE_RARE = new Color(132, 74, 37);
-	private static final int ITEM_WRAP_WIDTH = 84;
-	private static final int ITEM_COLUMN_WIDTH = 92;
-	private static final int QUANTITY_COLUMN_WIDTH = 34;
-	private static final int RARITY_COLUMN_WIDTH = 54;
-	private static final int PRICE_COLUMN_WIDTH = 38;
-	private static final float TITLE_FONT_SIZE = 17f;
-	private static final float BODY_FONT_SIZE = 14f;
-	private static final float META_FONT_SIZE = 13f;
+	private static final int ROW_WRAP_WIDTH = 205;
+	private static final float TITLE_FONT_SIZE = 18f;
+	private static final float BODY_FONT_SIZE = 15f;
+	private static final float META_FONT_SIZE = 14f;
 
 	private final ExecutorService executor;
 	private final Consumer<String> searchAction;
@@ -183,7 +178,7 @@ class DropTablePanel extends PluginPanel
 		JPanel top = new JPanel(new BorderLayout(6, 0));
 		top.setOpaque(false);
 		top.setAlignmentX(Component.LEFT_ALIGNMENT);
-		top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
 
 		searchField.addActionListener(this::submitSearch);
 		searchField.setFont(searchField.getFont().deriveFont(Font.PLAIN, BODY_FONT_SIZE));
@@ -307,50 +302,44 @@ class DropTablePanel extends PluginPanel
 	{
 		JPanel rowPanel = new JPanel(new BorderLayout(0, 0));
 		rowPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 23));
+		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
 		rowPanel.setBackground(TABLE_HEADER);
 		rowPanel.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, DIVIDER));
 
-		rowPanel.add(createCell("Item", ITEM_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.LEFT), BorderLayout.CENTER);
-		JPanel stats = new JPanel(new GridLayout(1, 3, 0, 0));
-		stats.setOpaque(false);
-		stats.add(createCell("Qty", QUANTITY_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.CENTER));
-		stats.add(createCell("Rate", RARITY_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.CENTER));
-		stats.add(createCell("Price", PRICE_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.RIGHT));
-		rowPanel.add(stats, BorderLayout.EAST);
+		rowPanel.add(createCell("Item  |  Qty  |  Rate  |  Price", TABLE_HEADER, Font.BOLD), BorderLayout.CENTER);
 		return rowPanel;
 	}
 
 	private JPanel createRowPanel(DropRow row)
 	{
-		JPanel rowPanel = new JPanel(new BorderLayout(0, 0));
+		JPanel rowPanel = new JPanel();
+		rowPanel.setLayout(new BoxLayout(rowPanel, BoxLayout.Y_AXIS));
 		rowPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
 		rowPanel.setBackground(TABLE_ROW);
 		rowPanel.setBorder(BorderFactory.createMatteBorder(0, 1, 1, 1, DIVIDER));
 
 		String rate = simplifyRarity(row.getRarity());
-		rowPanel.add(createCell(row.getItem(), ITEM_COLUMN_WIDTH, TABLE_ROW, Font.PLAIN, JLabel.LEFT), BorderLayout.CENTER);
+		JLabel itemLabel = createCell(row.getItem(), TABLE_ROW, Font.BOLD);
+		itemLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		rowPanel.add(itemLabel);
 
-		JPanel stats = new JPanel(new GridLayout(1, 3, 0, 0));
-		stats.setOpaque(false);
-		stats.add(createCell(row.getQuantity(), QUANTITY_COLUMN_WIDTH, TABLE_ROW, Font.PLAIN, JLabel.CENTER));
-		stats.add(createCell(rate, RARITY_COLUMN_WIDTH, rarityColor(row.getRarityScore()), Font.BOLD, JLabel.CENTER));
-		stats.add(createCell(row.getPrice(), PRICE_COLUMN_WIDTH, TABLE_ROW, Font.PLAIN, JLabel.RIGHT));
-		rowPanel.add(stats, BorderLayout.EAST);
+		JLabel detailLabel = createCell("Qty " + displayText(row.getQuantity())
+			+ "  |  Rate " + displayText(rate)
+			+ "  |  Price " + displayText(row.getPrice()), rarityColor(row.getRarityScore()), Font.PLAIN);
+		detailLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		rowPanel.add(detailLabel);
 		return rowPanel;
 	}
 
-	private JLabel createCell(String text, int width, Color background, int fontStyle, int alignment)
+	private JLabel createCell(String text, Color background, int fontStyle)
 	{
-		JLabel label = new JLabel("<html><body style='width:" + width + "px'>" + escape(displayText(text)) + "</body></html>");
+		JLabel label = new JLabel("<html><body style='width:" + ROW_WRAP_WIDTH + "px'>" + escape(displayText(text)) + "</body></html>");
 		label.setOpaque(true);
 		label.setBackground(background);
 		label.setForeground(TEXT);
-		label.setHorizontalAlignment(alignment);
 		label.setFont(label.getFont().deriveFont(fontStyle, META_FONT_SIZE));
 		label.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
-		label.setPreferredSize(new Dimension(width, 24));
 		return label;
 	}
 
