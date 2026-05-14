@@ -29,7 +29,7 @@ class WikiDropService
 {
 	private static final String WIKI_BASE = "https://oldschool.runescape.wiki";
 	private static final String API_BASE = WIKI_BASE + "/api.php";
-	private static final Pattern HEADING_PATTERN = Pattern.compile("(?is)<h([2-4])[^>]*>.*?<span[^>]*class=\"mw-headline\"[^>]*>(.*?)</span>.*?</h\\1>");
+	private static final Pattern HEADING_PATTERN = Pattern.compile("(?is)<h([2-4])[^>]*>(.*?)</h\\1>");
 	private static final Pattern TABLE_PATTERN = Pattern.compile("(?is)<table[^>]*class=\"[^\"]*wikitable[^\"]*\"[^>]*>.*?</table>");
 	private static final Pattern ROW_PATTERN = Pattern.compile("(?is)<tr[^>]*>(.*?)</tr>");
 	private static final Pattern CELL_PATTERN = Pattern.compile("(?is)<t([hd])[^>]*>(.*?)</t\\1>");
@@ -43,6 +43,7 @@ class WikiDropService
 	private static final List<String> RARITY_HEADERS = List.of("rarity", "drop rate");
 	private static final List<String> QUANTITY_HEADERS = List.of("quantity", "qty", "amount");
 	private static final List<String> ITEM_HEADERS = List.of("item", "items");
+	private static final List<String> PRICE_HEADERS = List.of("price", "value");
 	private static final String USER_AGENT = "RuneLite Drop Table Plugin/1.0 (+https://github.com/runelite/plugin-hub)";
 
 	private final HttpClient httpClient = HttpClient.newBuilder()
@@ -179,24 +180,22 @@ class WikiDropService
 			int itemIndex = findHeader(headers, ITEM_HEADERS);
 			int quantityIndex = findHeader(headers, QUANTITY_HEADERS);
 			int rarityIndex = findHeader(headers, RARITY_HEADERS);
+			int priceIndex = findHeader(headers, PRICE_HEADERS);
 			if (itemIndex < 0 || rarityIndex < 0)
 			{
 				continue;
 			}
 
-			List<DropRow> rows = extractRows(table.html, itemIndex, quantityIndex, rarityIndex);
+			List<DropRow> rows = extractRows(table.html, itemIndex, quantityIndex, rarityIndex, priceIndex);
 			if (rows.isEmpty())
 			{
 				continue;
 			}
 
 			String sectionName = determineSectionName(table, headings);
-			rows.sort(Comparator.comparingDouble(DropRow::getRarityScore).reversed()
-				.thenComparing(DropRow::getItem));
 			sections.add(new DropSection(sectionName, rankSection(sectionName), rows));
 		}
 
-		sections.sort(Comparator.comparingInt(DropSection::getPriority).thenComparing(DropSection::getName));
 		return sections;
 	}
 
@@ -241,7 +240,7 @@ class WikiDropService
 		return List.of();
 	}
 
-	private List<DropRow> extractRows(String tableHtml, int itemIndex, int quantityIndex, int rarityIndex)
+	private List<DropRow> extractRows(String tableHtml, int itemIndex, int quantityIndex, int rarityIndex, int priceIndex)
 	{
 		List<DropRow> rows = new ArrayList<>();
 		Matcher rowMatcher = ROW_PATTERN.matcher(tableHtml);
@@ -266,12 +265,13 @@ class WikiDropService
 			String item = cells.get(itemIndex);
 			String quantity = quantityIndex >= 0 && quantityIndex < cells.size() ? cells.get(quantityIndex) : "";
 			String rarity = cells.get(rarityIndex);
-			String notes = buildNotes(cells, itemIndex, quantityIndex, rarityIndex);
+			String price = priceIndex >= 0 && priceIndex < cells.size() ? cells.get(priceIndex) : "";
+			String notes = buildNotes(cells, itemIndex, quantityIndex, rarityIndex, priceIndex);
 			if (item.isEmpty() || rarity.isEmpty())
 			{
 				continue;
 			}
-			rows.add(new DropRow(item, quantity, rarity, notes, parseRarityScore(rarity)));
+			rows.add(new DropRow(item, quantity, rarity, price, notes, parseRarityScore(rarity)));
 		}
 		return rows;
 	}
@@ -328,12 +328,12 @@ class WikiDropService
 		return normalizeSectionName(fallback);
 	}
 
-	private String buildNotes(List<String> cells, int itemIndex, int quantityIndex, int rarityIndex)
+	private String buildNotes(List<String> cells, int itemIndex, int quantityIndex, int rarityIndex, int priceIndex)
 	{
 		List<String> notes = new ArrayList<>();
 		for (int i = 0; i < cells.size(); i++)
 		{
-			if (i == itemIndex || i == quantityIndex || i == rarityIndex)
+			if (i == itemIndex || i == quantityIndex || i == rarityIndex || i == priceIndex)
 			{
 				continue;
 			}

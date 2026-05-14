@@ -71,14 +71,16 @@ final class DropTableModels
 		private final String item;
 		private final String quantity;
 		private final String rarity;
+		private final String price;
 		private final String notes;
 		private final double rarityScore;
 
-		DropRow(String item, String quantity, String rarity, String notes, double rarityScore)
+		DropRow(String item, String quantity, String rarity, String price, String notes, double rarityScore)
 		{
 			this.item = item;
 			this.quantity = quantity;
 			this.rarity = rarity;
+			this.price = price;
 			this.notes = notes;
 			this.rarityScore = rarityScore;
 		}
@@ -96,6 +98,11 @@ final class DropTableModels
 		String getRarity()
 		{
 			return rarity;
+		}
+
+		String getPrice()
+		{
+			return price;
 		}
 
 		String getNotes()

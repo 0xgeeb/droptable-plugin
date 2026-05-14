@@ -8,6 +8,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -41,7 +42,16 @@ class DropTablePanel extends PluginPanel
 	private static final Color HEADER = new Color(255, 204, 102);
 	private static final Color DIVIDER = new Color(52, 56, 62);
 	private static final Color SUGGESTION_SELECTED = new Color(61, 68, 79);
-	private static final int ITEM_WRAP_WIDTH = 205;
+	private static final Color TABLE_HEADER = new Color(60, 52, 42);
+	private static final Color TABLE_ROW = new Color(38, 38, 38);
+	private static final Color RATE_COMMON = new Color(34, 116, 62);
+	private static final Color RATE_UNCOMMON = new Color(130, 116, 34);
+	private static final Color RATE_RARE = new Color(132, 74, 37);
+	private static final int ITEM_WRAP_WIDTH = 84;
+	private static final int ITEM_COLUMN_WIDTH = 92;
+	private static final int QUANTITY_COLUMN_WIDTH = 34;
+	private static final int RARITY_COLUMN_WIDTH = 54;
+	private static final int PRICE_COLUMN_WIDTH = 38;
 	private static final float TITLE_FONT_SIZE = 17f;
 	private static final float BODY_FONT_SIZE = 14f;
 	private static final float META_FONT_SIZE = 13f;
@@ -121,7 +131,7 @@ class DropTablePanel extends PluginPanel
 	void renderResult(SearchResult result)
 	{
 		monsterLabel.setText(result.getTitle());
-		statusLabel.setText("Rarest sections are shown first.");
+		statusLabel.setText("Wiki drop table sections.");
 		searchButton.setEnabled(true);
 		clearSuggestions();
 		resultsPanel.removeAll();
@@ -280,9 +290,10 @@ class DropTablePanel extends PluginPanel
 		JLabel sectionLabel = new JLabel(section.getName());
 		sectionLabel.setForeground(HEADER);
 		sectionLabel.setFont(sectionLabel.getFont().deriveFont(Font.BOLD, BODY_FONT_SIZE));
-		sectionLabel.setBorder(BorderFactory.createEmptyBorder(6, 0, 4, 0));
+		sectionLabel.setBorder(BorderFactory.createEmptyBorder(8, 0, 4, 0));
 		sectionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 		sectionPanel.add(sectionLabel);
+		sectionPanel.add(createHeaderRow());
 
 		for (DropRow row : section.getRows())
 		{
@@ -292,24 +303,55 @@ class DropTablePanel extends PluginPanel
 		return sectionPanel;
 	}
 
+	private JPanel createHeaderRow()
+	{
+		JPanel rowPanel = new JPanel(new BorderLayout(0, 0));
+		rowPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 23));
+		rowPanel.setBackground(TABLE_HEADER);
+		rowPanel.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, DIVIDER));
+
+		rowPanel.add(createCell("Item", ITEM_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.LEFT), BorderLayout.CENTER);
+		JPanel stats = new JPanel(new GridLayout(1, 3, 0, 0));
+		stats.setOpaque(false);
+		stats.add(createCell("Qty", QUANTITY_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.CENTER));
+		stats.add(createCell("Rate", RARITY_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.CENTER));
+		stats.add(createCell("Price", PRICE_COLUMN_WIDTH, TABLE_HEADER, Font.BOLD, JLabel.RIGHT));
+		rowPanel.add(stats, BorderLayout.EAST);
+		return rowPanel;
+	}
+
 	private JPanel createRowPanel(DropRow row)
 	{
 		JPanel rowPanel = new JPanel(new BorderLayout(0, 0));
-		rowPanel.setOpaque(false);
 		rowPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
-		rowPanel.setBorder(BorderFactory.createEmptyBorder(3, 0, 3, 0));
+		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+		rowPanel.setBackground(TABLE_ROW);
+		rowPanel.setBorder(BorderFactory.createMatteBorder(0, 1, 1, 1, DIVIDER));
 
 		String rate = simplifyRarity(row.getRarity());
-		JLabel itemLabel = new JLabel("<html><body style='width:" + ITEM_WRAP_WIDTH + "px'>"
-			+ escape(row.getItem())
-			+ " <b>(" + escape(rate) + ")</b>"
-			+ "</body></html>");
-		itemLabel.setForeground(TEXT);
-		itemLabel.setFont(itemLabel.getFont().deriveFont(Font.PLAIN, BODY_FONT_SIZE));
+		rowPanel.add(createCell(row.getItem(), ITEM_COLUMN_WIDTH, TABLE_ROW, Font.PLAIN, JLabel.LEFT), BorderLayout.CENTER);
 
-		rowPanel.add(itemLabel, BorderLayout.CENTER);
+		JPanel stats = new JPanel(new GridLayout(1, 3, 0, 0));
+		stats.setOpaque(false);
+		stats.add(createCell(row.getQuantity(), QUANTITY_COLUMN_WIDTH, TABLE_ROW, Font.PLAIN, JLabel.CENTER));
+		stats.add(createCell(rate, RARITY_COLUMN_WIDTH, rarityColor(row.getRarityScore()), Font.BOLD, JLabel.CENTER));
+		stats.add(createCell(row.getPrice(), PRICE_COLUMN_WIDTH, TABLE_ROW, Font.PLAIN, JLabel.RIGHT));
+		rowPanel.add(stats, BorderLayout.EAST);
 		return rowPanel;
+	}
+
+	private JLabel createCell(String text, int width, Color background, int fontStyle, int alignment)
+	{
+		JLabel label = new JLabel("<html><body style='width:" + width + "px'>" + escape(displayText(text)) + "</body></html>");
+		label.setOpaque(true);
+		label.setBackground(background);
+		label.setForeground(TEXT);
+		label.setHorizontalAlignment(alignment);
+		label.setFont(label.getFont().deriveFont(fontStyle, META_FONT_SIZE));
+		label.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
+		label.setPreferredSize(new Dimension(width, 24));
+		return label;
 	}
 
 	private JLabel createMessageLabel(String text)
@@ -418,6 +460,24 @@ class DropTablePanel extends PluginPanel
 			return "Always";
 		}
 		return rarity;
+	}
+
+	private Color rarityColor(double rarityScore)
+	{
+		if (rarityScore <= 0d || rarityScore <= 25d)
+		{
+			return RATE_COMMON;
+		}
+		if (rarityScore <= 64d)
+		{
+			return RATE_UNCOMMON;
+		}
+		return RATE_RARE;
+	}
+
+	private String displayText(String text)
+	{
+		return text == null || text.isBlank() ? "-" : text;
 	}
 
 	private String escape(String text)
