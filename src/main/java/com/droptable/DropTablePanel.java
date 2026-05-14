@@ -42,6 +42,9 @@ class DropTablePanel extends PluginPanel
 	private static final Color DIVIDER = new Color(52, 56, 62);
 	private static final Color SUGGESTION_SELECTED = new Color(61, 68, 79);
 	private static final int ITEM_WRAP_WIDTH = 135;
+	private static final float TITLE_FONT_SIZE = 17f;
+	private static final float BODY_FONT_SIZE = 14f;
+	private static final float META_FONT_SIZE = 13f;
 
 	private final ExecutorService executor;
 	private final Consumer<String> searchAction;
@@ -74,12 +77,12 @@ class DropTablePanel extends PluginPanel
 
 		monsterLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 		monsterLabel.setForeground(TEXT);
-		monsterLabel.setFont(monsterLabel.getFont().deriveFont(Font.BOLD, 16f));
+		monsterLabel.setFont(monsterLabel.getFont().deriveFont(Font.BOLD, TITLE_FONT_SIZE));
 		top.add(monsterLabel);
 
 		statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 		statusLabel.setForeground(MUTED);
-		statusLabel.setFont(statusLabel.getFont().deriveFont(Font.PLAIN, 12f));
+		statusLabel.setFont(statusLabel.getFont().deriveFont(Font.PLAIN, META_FONT_SIZE));
 		top.add(statusLabel);
 
 		resultsPanel.setOpaque(false);
@@ -171,6 +174,7 @@ class DropTablePanel extends PluginPanel
 		top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 
 		searchField.addActionListener(this::submitSearch);
+		searchField.setFont(searchField.getFont().deriveFont(Font.PLAIN, BODY_FONT_SIZE));
 		searchField.getDocument().addDocumentListener(new DocumentListener()
 		{
 			@Override
@@ -225,6 +229,7 @@ class DropTablePanel extends PluginPanel
 		});
 
 		searchButton.addActionListener(this::submitSearch);
+		searchButton.setFont(searchButton.getFont().deriveFont(Font.BOLD, META_FONT_SIZE));
 
 		suggestionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		suggestionList.setFocusable(false);
@@ -237,6 +242,7 @@ class DropTablePanel extends PluginPanel
 				label.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
 				label.setBackground(isSelected ? SUGGESTION_SELECTED : ColorScheme.DARK_GRAY_COLOR);
 				label.setForeground(TEXT);
+				label.setFont(label.getFont().deriveFont(Font.PLAIN, BODY_FONT_SIZE));
 				return label;
 			}
 		});
@@ -271,7 +277,7 @@ class DropTablePanel extends PluginPanel
 
 		JLabel sectionLabel = new JLabel(section.getName());
 		sectionLabel.setForeground(HEADER);
-		sectionLabel.setFont(sectionLabel.getFont().deriveFont(Font.BOLD, 12f));
+		sectionLabel.setFont(sectionLabel.getFont().deriveFont(Font.BOLD, BODY_FONT_SIZE));
 		sectionLabel.setBorder(BorderFactory.createEmptyBorder(6, 0, 4, 0));
 		sectionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 		sectionPanel.add(sectionLabel);
@@ -294,11 +300,11 @@ class DropTablePanel extends PluginPanel
 
 		JLabel itemLabel = new JLabel("<html><body style='width:" + ITEM_WRAP_WIDTH + "px'>" + escape(row.getItem()) + "</body></html>");
 		itemLabel.setForeground(TEXT);
-		itemLabel.setFont(itemLabel.getFont().deriveFont(Font.PLAIN, 12f));
+		itemLabel.setFont(itemLabel.getFont().deriveFont(Font.PLAIN, BODY_FONT_SIZE));
 
 		JLabel rarityLabel = new JLabel(simplifyRarity(row.getRarity()));
 		rarityLabel.setForeground(TEXT);
-		rarityLabel.setFont(rarityLabel.getFont().deriveFont(Font.BOLD, 12f));
+		rarityLabel.setFont(rarityLabel.getFont().deriveFont(Font.BOLD, BODY_FONT_SIZE));
 
 		rowPanel.add(itemLabel, BorderLayout.CENTER);
 		rowPanel.add(rarityLabel, BorderLayout.EAST);
@@ -310,7 +316,7 @@ class DropTablePanel extends PluginPanel
 		JLabel label = new JLabel("<html><body style='width:180px'>" + escape(text) + "</body></html>");
 		label.setAlignmentX(Component.LEFT_ALIGNMENT);
 		label.setForeground(MUTED);
-		label.setFont(label.getFont().deriveFont(Font.PLAIN, 12f));
+		label.setFont(label.getFont().deriveFont(Font.PLAIN, META_FONT_SIZE));
 		return label;
 	}
 
