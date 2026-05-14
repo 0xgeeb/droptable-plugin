@@ -36,10 +36,13 @@ class WikiDropService
 	private static final Pattern CAPTION_PATTERN = Pattern.compile("(?is)<caption[^>]*>(.*?)</caption>");
 	private static final Pattern EDIT_SECTION_PATTERN = Pattern.compile("(?is)<span[^>]*class=\"[^\"]*mw-editsection[^\"]*\"[^>]*>.*?</span>");
 	private static final Pattern PARTIAL_TAG_PATTERN = Pattern.compile("(?is)\\b[a-z][a-z0-9:-]*\\s+[^<>]*>");
+	private static final Pattern ENTITY_NUMBER_PATTERN = Pattern.compile("&#(x?[0-9a-fA-F]+);");
+	private static final Pattern CITATION_PATTERN = Pattern.compile("\\s*\\[[^]]*]\\s*");
 	private static final Pattern TAG_PATTERN = Pattern.compile("(?is)<[^>]+>");
 	private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
-	private static final Pattern RARITY_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.\\d+)?)\\s*/\\s*(\\d+(?:\\.\\d+)?)");
-	private static final Pattern MULTIPLIER_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.\\d+)?)\\s*[x×]\\s*(\\d+(?:\\.\\d+)?)\\s*/\\s*(\\d+(?:\\.\\d+)?)");
+	private static final String NUMBER_PATTERN = "\\d[\\d,]*(?:\\.\\d+)?";
+	private static final Pattern RARITY_PATTERN = Pattern.compile("(?i)(" + NUMBER_PATTERN + ")\\s*/\\s*(" + NUMBER_PATTERN + ")");
+	private static final Pattern MULTIPLIER_PATTERN = Pattern.compile("(?i)(" + NUMBER_PATTERN + ")\\s*[x×]\\s*(" + NUMBER_PATTERN + ")\\s*/\\s*(" + NUMBER_PATTERN + ")");
 	private static final List<String> RARITY_HEADERS = List.of("rarity", "drop rate");
 	private static final List<String> QUANTITY_HEADERS = List.of("quantity", "qty", "amount");
 	private static final List<String> ITEM_HEADERS = List.of("item", "items");
@@ -264,7 +267,7 @@ class WikiDropService
 
 			String item = cells.get(itemIndex);
 			String quantity = quantityIndex >= 0 && quantityIndex < cells.size() ? cells.get(quantityIndex) : "";
-			String rarity = cells.get(rarityIndex);
+			String rarity = cleanRarity(cells.get(rarityIndex));
 			String price = priceIndex >= 0 && priceIndex < cells.size() ? cells.get(priceIndex) : "";
 			String notes = buildNotes(cells, itemIndex, quantityIndex, rarityIndex, priceIndex);
 			if (item.isEmpty() || rarity.isEmpty())
@@ -412,7 +415,7 @@ class WikiDropService
 
 	private double parseRarityScore(String rarity)
 	{
-		String normalized = rarity.toLowerCase(Locale.ROOT);
+		String normalized = cleanRarity(rarity).toLowerCase(Locale.ROOT);
 		if (normalized.contains("always"))
 		{
 			return 1d;
@@ -448,12 +451,22 @@ class WikiDropService
 	{
 		try
 		{
-			return Double.parseDouble(value);
+			return Double.parseDouble(value.replace(",", ""));
 		}
 		catch (NumberFormatException ex)
 		{
 			return 0d;
 		}
+	}
+
+	private String cleanRarity(String rarity)
+	{
+		if (rarity == null)
+		{
+			return "";
+		}
+		String cleaned = CITATION_PATTERN.matcher(rarity).replaceAll(" ");
+		return WHITESPACE_PATTERN.matcher(cleaned).replaceAll(" ").trim();
 	}
 
 	private String send(String url) throws IOException, InterruptedException
@@ -483,13 +496,14 @@ class WikiDropService
 		text = TAG_PATTERN.matcher(text).replaceAll(" ");
 		text = PARTIAL_TAG_PATTERN.matcher(text).replaceAll(" ");
 		text = decodeEntities(text);
+		text = CITATION_PATTERN.matcher(text).replaceAll(" ");
 		text = WHITESPACE_PATTERN.matcher(text).replaceAll(" ").trim();
 		return text;
 	}
 
 	private String decodeEntities(String text)
 	{
-		return text
+		String decoded = text
 			.replace("&nbsp;", " ")
 			.replace("&amp;", "&")
 			.replace("&quot;", "\"")
@@ -497,6 +511,28 @@ class WikiDropService
 			.replace("&apos;", "'")
 			.replace("&lt;", "<")
 			.replace("&gt;", ">");
+		Matcher matcher = ENTITY_NUMBER_PATTERN.matcher(decoded);
+		StringBuffer buffer = new StringBuffer();
+		while (matcher.find())
+		{
+			matcher.appendReplacement(buffer, Matcher.quoteReplacement(decodeNumericEntity(matcher.group(1))));
+		}
+		matcher.appendTail(buffer);
+		return buffer.toString();
+	}
+
+	private String decodeNumericEntity(String value)
+	{
+		try
+		{
+			int radix = value.startsWith("x") || value.startsWith("X") ? 16 : 10;
+			String digits = radix == 16 ? value.substring(1) : value;
+			return Character.toString((char) Integer.parseInt(digits, radix));
+		}
+		catch (NumberFormatException ex)
+		{
+			return "";
+		}
 	}
 
 	private String urlEncode(String value)

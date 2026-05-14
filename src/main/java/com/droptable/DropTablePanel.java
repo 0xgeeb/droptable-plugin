@@ -11,9 +11,14 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -47,6 +52,9 @@ class DropTablePanel extends PluginPanel
 	private static final Color RATE_UNCOMMON = new Color(130, 116, 34);
 	private static final Color RATE_RARE = new Color(132, 74, 37);
 	private static final int ROW_WRAP_WIDTH = 205;
+	private static final Pattern RARITY_PATTERN = Pattern.compile("(?i)(\\d[\\d,]*(?:\\.\\d+)?)\\s*/\\s*(\\d[\\d,]*(?:\\.\\d+)?)");
+	private static final Pattern MULTIPLIER_PATTERN = Pattern.compile("(?i)(\\d[\\d,]*(?:\\.\\d+)?)\\s*[x×]\\s*(\\d[\\d,]*(?:\\.\\d+)?)\\s*/\\s*(\\d[\\d,]*(?:\\.\\d+)?)");
+	private static final DecimalFormat ODDS_FORMAT = new DecimalFormat("#,##0.##", DecimalFormatSymbols.getInstance(Locale.US));
 	private static final float TITLE_FONT_SIZE = 18f;
 	private static final float BODY_FONT_SIZE = 15f;
 	private static final float META_FONT_SIZE = 14f;
@@ -428,26 +436,35 @@ class DropTablePanel extends PluginPanel
 		{
 			return "";
 		}
-		String normalized = rarity.replace(" ", "");
-		int start = normalized.indexOf("1/");
-		if (start >= 0)
-		{
-			int end = start + 2;
-			while (end < normalized.length())
-			{
-				char ch = normalized.charAt(end);
-				if (!(Character.isDigit(ch) || ch == '.' || ch == ',' || ch == 'k' || ch == 'm' || ch == 'K' || ch == 'M'))
-				{
-					break;
-				}
-				end++;
-			}
-			return normalized.substring(start, end);
-		}
+		String normalized = rarity.replace(" ", "").replace(",", "");
 		if (normalized.equalsIgnoreCase("Always"))
 		{
 			return "Always";
 		}
+
+		Matcher multiplied = MULTIPLIER_PATTERN.matcher(rarity);
+		if (multiplied.find())
+		{
+			double multiplier = parseNumber(multiplied.group(1));
+			double numerator = parseNumber(multiplied.group(2));
+			double denominator = parseNumber(multiplied.group(3));
+			if (multiplier > 0d && numerator > 0d)
+			{
+				return "1/" + ODDS_FORMAT.format(denominator / (multiplier * numerator));
+			}
+		}
+
+		Matcher fraction = RARITY_PATTERN.matcher(rarity);
+		if (fraction.find())
+		{
+			double numerator = parseNumber(fraction.group(1));
+			double denominator = parseNumber(fraction.group(2));
+			if (numerator > 0d)
+			{
+				return "1/" + ODDS_FORMAT.format(denominator / numerator);
+			}
+		}
+
 		return rarity;
 	}
 
@@ -457,11 +474,23 @@ class DropTablePanel extends PluginPanel
 		{
 			return RATE_COMMON;
 		}
-		if (rarityScore <= 64d)
+		if (rarityScore <= 128d)
 		{
 			return RATE_UNCOMMON;
 		}
 		return RATE_RARE;
+	}
+
+	private double parseNumber(String value)
+	{
+		try
+		{
+			return Double.parseDouble(value.replace(",", ""));
+		}
+		catch (NumberFormatException ex)
+		{
+			return 0d;
+		}
 	}
 
 	private String displayText(String text)
