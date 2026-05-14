@@ -57,6 +57,7 @@ class DropTablePanel extends PluginPanel
 	private final DefaultListModel<String> suggestionModel = new DefaultListModel<>();
 	private final JList<String> suggestionList = new JList<>(suggestionModel);
 	private final JPopupMenu suggestionPopup = new JPopupMenu();
+	private boolean applyingSuggestion;
 
 	DropTablePanel(ExecutorService executor, Consumer<String> searchAction, Consumer<String> suggestionAction)
 	{
@@ -122,6 +123,7 @@ class DropTablePanel extends PluginPanel
 		monsterLabel.setText(result.getTitle());
 		statusLabel.setText("Rarest sections are shown first.");
 		searchButton.setEnabled(true);
+		clearSuggestions();
 		resultsPanel.removeAll();
 
 		for (DropSection section : result.getSections())
@@ -329,6 +331,11 @@ class DropTablePanel extends PluginPanel
 
 	private void requestSuggestions()
 	{
+		if (applyingSuggestion)
+		{
+			return;
+		}
+
 		String query = searchField.getText().trim();
 		if (query.length() < 2)
 		{
@@ -347,8 +354,16 @@ class DropTablePanel extends PluginPanel
 			return;
 		}
 
-		searchField.setText(selected);
-		clearSuggestions();
+		applyingSuggestion = true;
+		try
+		{
+			clearSuggestions();
+			searchField.setText(selected);
+		}
+		finally
+		{
+			applyingSuggestion = false;
+		}
 		submitSearch(null);
 	}
 
