@@ -34,6 +34,8 @@ class WikiDropService
 	private static final Pattern ROW_PATTERN = Pattern.compile("(?is)<tr[^>]*>(.*?)</tr>");
 	private static final Pattern CELL_PATTERN = Pattern.compile("(?is)<t([hd])[^>]*>(.*?)</t\\1>");
 	private static final Pattern CAPTION_PATTERN = Pattern.compile("(?is)<caption[^>]*>(.*?)</caption>");
+	private static final Pattern EDIT_SECTION_PATTERN = Pattern.compile("(?is)<span[^>]*class=\"[^\"]*mw-editsection[^\"]*\"[^>]*>.*?</span>");
+	private static final Pattern PARTIAL_TAG_PATTERN = Pattern.compile("(?is)\\b[a-z][a-z0-9:-]*\\s+[^<>]*>");
 	private static final Pattern TAG_PATTERN = Pattern.compile("(?is)<[^>]+>");
 	private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
 	private static final Pattern RARITY_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.\\d+)?)\\s*/\\s*(\\d+(?:\\.\\d+)?)");
@@ -220,7 +222,7 @@ class WikiDropService
 		Matcher matcher = TABLE_PATTERN.matcher(html);
 		while (matcher.find())
 		{
-			tables.add(new TableBlock(matcher.start(), matcher.group(), html));
+			tables.add(new TableBlock(matcher.start(), matcher.group()));
 		}
 		return tables;
 	}
@@ -323,15 +325,6 @@ class WikiDropService
 			fallback = heading.name;
 		}
 
-		if ("Drops".equalsIgnoreCase(fallback))
-		{
-			String contextual = extractContextualLabel(table);
-			if (!contextual.isEmpty())
-			{
-				return normalizeSectionName(contextual);
-			}
-		}
-
 		return normalizeSectionName(fallback);
 	}
 
@@ -357,24 +350,6 @@ class WikiDropService
 			return cleanText(matcher.group(1));
 		}
 		return "";
-	}
-
-	private String extractContextualLabel(TableBlock table)
-	{
-		int contextStart = Math.max(0, table.startIndex - 240);
-		String prefix = table.fullHtml.substring(contextStart, table.startIndex);
-		List<Heading> localHeadings = extractHeadings(prefix);
-		if (!localHeadings.isEmpty())
-		{
-			return localHeadings.get(localHeadings.size() - 1).name;
-		}
-		String cleaned = cleanText(prefix);
-		String[] parts = cleaned.split("\\.");
-		if (parts.length == 0)
-		{
-			return "";
-		}
-		return parts[parts.length - 1].trim();
 	}
 
 	private int scoreDropHtml(String html)
@@ -500,11 +475,13 @@ class WikiDropService
 
 	private String cleanText(String input)
 	{
-		String text = input
+		String text = EDIT_SECTION_PATTERN.matcher(input).replaceAll(" ");
+		text = text
 			.replace("<br>", "\n")
 			.replace("<br/>", "\n")
 			.replace("<br />", "\n");
 		text = TAG_PATTERN.matcher(text).replaceAll(" ");
+		text = PARTIAL_TAG_PATTERN.matcher(text).replaceAll(" ");
 		text = decodeEntities(text);
 		text = WHITESPACE_PATTERN.matcher(text).replaceAll(" ").trim();
 		return text;
@@ -548,13 +525,11 @@ class WikiDropService
 	{
 		private final int startIndex;
 		private final String html;
-		private final String fullHtml;
 
-		private TableBlock(int startIndex, String html, String fullHtml)
+		private TableBlock(int startIndex, String html)
 		{
 			this.startIndex = startIndex;
 			this.html = html;
-			this.fullHtml = fullHtml;
 		}
 	}
 }
