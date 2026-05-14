@@ -41,7 +41,7 @@ class DropTablePanel extends PluginPanel
 	private static final Color HEADER = new Color(255, 204, 102);
 	private static final Color DIVIDER = new Color(52, 56, 62);
 	private static final Color SUGGESTION_SELECTED = new Color(61, 68, 79);
-	private static final int ITEM_WRAP_WIDTH = 135;
+	private static final int ITEM_WRAP_WIDTH = 205;
 	private static final float TITLE_FONT_SIZE = 17f;
 	private static final float BODY_FONT_SIZE = 14f;
 	private static final float META_FONT_SIZE = 13f;
@@ -294,22 +294,21 @@ class DropTablePanel extends PluginPanel
 
 	private JPanel createRowPanel(DropRow row)
 	{
-		JPanel rowPanel = new JPanel(new BorderLayout(8, 0));
+		JPanel rowPanel = new JPanel(new BorderLayout(0, 0));
 		rowPanel.setOpaque(false);
 		rowPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-		rowPanel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+		rowPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
+		rowPanel.setBorder(BorderFactory.createEmptyBorder(3, 0, 3, 0));
 
-		JLabel itemLabel = new JLabel("<html><body style='width:" + ITEM_WRAP_WIDTH + "px'>" + escape(row.getItem()) + "</body></html>");
+		String rate = simplifyRarity(row.getRarity());
+		JLabel itemLabel = new JLabel("<html><body style='width:" + ITEM_WRAP_WIDTH + "px'>"
+			+ escape(row.getItem())
+			+ " <b>(" + escape(rate) + ")</b>"
+			+ "</body></html>");
 		itemLabel.setForeground(TEXT);
 		itemLabel.setFont(itemLabel.getFont().deriveFont(Font.PLAIN, BODY_FONT_SIZE));
 
-		JLabel rarityLabel = new JLabel(simplifyRarity(row.getRarity()));
-		rarityLabel.setForeground(TEXT);
-		rarityLabel.setFont(rarityLabel.getFont().deriveFont(Font.BOLD, BODY_FONT_SIZE));
-
 		rowPanel.add(itemLabel, BorderLayout.CENTER);
-		rowPanel.add(rarityLabel, BorderLayout.EAST);
 		return rowPanel;
 	}
 
